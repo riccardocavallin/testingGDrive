@@ -4,6 +4,72 @@ const createCsvWriter = require('csv-writer');
 const ipfsAPI = require('ipfs-http-client');
 const axios = require('axios').default;
 const skynet = require('@nebulous/skynet');
+const readline = require('readline');
+const { google } = require('googleapis');
+
+// If modifying these scopes, delete token.json.
+const SCOPES = ['https://www.googleapis.com/auth/drive'];
+// The file token.json stores the user's access and refresh tokens, and is
+// created automatically when the authorization flow completes for the first
+// time.
+const TOKEN_PATH = 'token.json';
+
+/**
+ * Create an OAuth2 client with the given credentials, and then execute the
+ * given callback function.
+ * @param {Object} credentials The authorization client credentials.
+ * @param {function} callback The callback to call with the authorized client.
+ */
+function authorize(credentials, callback) {
+  const { client_secret, client_id, redirect_uris } = credentials.installed;
+  const oAuth2Client = new google.auth.OAuth2(
+    client_id, client_secret, redirect_uris[0]);
+
+  // Check if we have previously stored a token.
+  fs.readFile(TOKEN_PATH, (err, token) => {
+    if (err) return getAccessToken(oAuth2Client, callback);
+    oAuth2Client.setCredentials(JSON.parse(token));
+    callback(oAuth2Client);
+  });
+}
+
+/**
+ * Get and store new token after prompting for user authorization, and then
+ * execute the given callback with the authorized OAuth2 client.
+ * @param {google.auth.OAuth2} oAuth2Client The OAuth2 client to get token for.
+ * @param {getEventsCallback} callback The callback for the authorized client.
+ */
+function getAccessToken(oAuth2Client, callback) {
+  const authUrl = oAuth2Client.generateAuthUrl({
+    access_type: 'offline',
+    scope: SCOPES,
+  });
+  console.log('Authorize this app by visiting this url:', authUrl);
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  rl.question('Enter the code from that page here: ', (code) => {
+    rl.close();
+    oAuth2Client.getToken(code, (err, token) => {
+      if (err) return console.error('Error retrieving access token', err);
+      oAuth2Client.setCredentials(token);
+      // Store the token to disk for later program executions
+      fs.writeFile(TOKEN_PATH, JSON.stringify(token), (err) => {
+        if (err) return console.error(err);
+        console.log('Token stored to', TOKEN_PATH);
+      });
+      callback(oAuth2Client);
+    });
+  });
+}
+
+// Load client secrets from a local file.
+fs.readFile('credentials.json', (err, content) => {
+  if (err) return console.log('Error loading client secret file:', err);
+  // Authorize a client with credentials, then call the Google Drive API.
+  authorize(JSON.parse(content), createFolder);
+});
 
 const optionDefinitions = [
   { name: 'number', alias: 'n', type: Number, defaultValue: 10 },
@@ -15,6 +81,7 @@ const optionDefinitions = [
   { name: 'timeout', alias: 't', type: Number, defaultValue: 200000 },
 ];
 const commandLineArgs = require('command-line-args');
+const { auth } = require('googleapis/build/src/apis/abusiveexperiencereport');
 const options = commandLineArgs(optionDefinitions);
 
 // Constant Values
@@ -100,41 +167,66 @@ const initBus = async (busID) => {
   }
 };
 
-const publish = async (b, id, json, prop) => {
-  console.log;
-  const ipfs = !prop ? ipfsProp : ipfsService;
-  let startTS = -1,
-    finishTS = -1;
+const publish = async (b, id, json, prop, auth) => {
+  const drive = google.drive({ version: 'v3', auth });
+  let startTS = -1, finishTS = -1;
+  // data = new Blob([JSON.stringify(json)], {type: 'application/json'});
+  data = JSON.stringify(json);
+
+
   try {
     //Start operations
     startTS = new Date().getTime();
-    const raceRes = await Promise.race([
-      //first
-      new Promise(async (resolve, reject) => {
-        for await (const result of ipfs.add(JSON.stringify(json))) {
-          //console.log(result);
-        }
-        resolve(true);
-      }),
-      //second
-      sleep(timeoutValue),
-    ]);
-    if (raceRes) {
-      finishTS = new Date().getTime();
-      // Latency measures
-      r = finishTS - startTS;
-      // Log result
-      console.log(prop + ') bus ' + b + ': ' + r + 'ms');
-      fs.appendFile(
-        bus[b].csv[prop],
-        startTS + ',' + finishTS + ',' + id + '\n',
-        (err) => {
-          if (err) throw err;
-        }
-      );
+    if (image) {
+      var fileName = 's' + startTS + '.jpg';
+      var fileMetadata = {
+        'name': fileName,
+        parents: [global.folderId]
+      };
+      var media = {
+        mimeType: 'image/jpeg',
+        body: fs.createReadStream(imagePath)
+      };
     } else {
-      throw new Error('ipfs add timeout');
+      var fileName = 's' + startTS + '.csv';
+      var fileMetadata = {
+        'name': fileName,
+        parents: [global.folderId]
+      };
+      var media = {
+        mimeType: 'text/csv',
+        body: data
+      };
     }
+    //first
+    new Promise(async (resolve, reject) => {
+      drive.files.create({
+        resource: fileMetadata,
+        media: media,
+        fields: 'id'
+      }, function (err, res) {
+        if (err) {
+          // Handle error
+          console.log('Error uploading do gdrive: ' + err);
+        } else { // if succeded
+          finishTS = new Date().getTime();
+          // Latency measures
+          r = finishTS - startTS;
+          // Log result
+          console.log(prop + ') bus ' + b + ': ' + r + 'ms');
+          fs.appendFile(
+            bus[b].csv[prop],
+            startTS + ',' + finishTS + ',' + id + '\n',
+            (err) => {
+              if (err) throw err;
+            }
+          );
+        }
+      });
+      resolve(true);
+    })
+    //second
+    sleep(timeoutValue);
   } catch (err) {
     console.log(prop + ')' + b + ': ' + err);
     fs.appendFile(
@@ -197,8 +289,9 @@ const publishSia = async (b, id, json) => {
 };
 
 // Main phase, reading buses behavior in order to publish messages to MAM channels
-const go = async () => {
+const go = async (auth) => {
   const liner = new lineByLine(inputBuses);
+  console.log('INPUT BUSES: ' + inputBuses)
   try {
     const base64image = new Buffer(fs.readFileSync(imagePath)).toString(
       'base64'
@@ -223,7 +316,8 @@ const go = async () => {
             payload: payloadValue,
             timestampISO: new Date().toISOString(),
           },
-          0
+          0,
+          auth
         );
       }
 
@@ -235,7 +329,8 @@ const go = async () => {
             payload: payloadValue,
             timestampISO: new Date().toISOString(),
           },
-          1
+          1,
+          auth
         );
       }
 
@@ -251,11 +346,34 @@ const go = async () => {
   }
 };
 
-const main = async () => {
+async function createFolder(auth) {
+  // creation of remote folder in gdrive
+  const drive = google.drive({ version: 'v3', auth });
+  // create folder in gdrive
+  var fileMetadata = {
+    'name': 'TestGDriveAPIs',
+    'mimeType': 'application/vnd.google-apps.folder'
+  };
+  drive.files.create({
+    resource: fileMetadata,
+    fields: 'id'
+  }, function (err, file) {
+    if (err) {
+      // Handle error
+      console.error(err);
+    } else {
+      console.log('Folder Id: ', file.data.id);
+      global.folderId = file.data.id
+      main(auth)
+    }
+  });
+}
+
+const main = async (auth) => {
+  console.log('FOLDER ID: ' + global.folderId);
   await sleep(awaitFor * 60000);
   setupEnvironment();
-  await go();
+  await go(auth);
   console.log('Finished approximately at : ' + new Date().toString());
 };
 
-main();
