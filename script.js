@@ -1,9 +1,6 @@
 const fs = require('fs');
 const lineByLine = require('n-readlines');
 const createCsvWriter = require('csv-writer');
-const ipfsAPI = require('ipfs-http-client');
-const axios = require('axios').default;
-const skynet = require('@nebulous/skynet');
 const readline = require('readline');
 const { google } = require('googleapis');
 
@@ -73,12 +70,9 @@ fs.readFile('credentials.json', (err, content) => {
 
 const optionDefinitions = [
   { name: 'number', alias: 'n', type: Number, defaultValue: 10 },
-  { name: 'await', alias: 'a', type: Number, defaultValue: 0 },
+  { name: 'await', alias: 'a', type: Number, defaultValue: 0 }, // set del tempo di attesa
   { name: 'image', alias: 'i', type: Boolean, defaultValue: false },
-  { name: 'prop', alias: 'p', type: Boolean, defaultValue: false },
-  { name: 'service', alias: 'k', type: Boolean, defaultValue: false },
-  { name: 'sia', alias: 's', type: Boolean, defaultValue: false },
-  { name: 'timeout', alias: 't', type: Number, defaultValue: 200000 },
+  { name: 'timeout', alias: 't', type: Number, defaultValue: 200000 } // tempo di attesa del caricamento tra una richiesta e l'altra
 ];
 const commandLineArgs = require('command-line-args');
 const { auth } = require('googleapis/build/src/apis/abusiveexperiencereport');
@@ -86,24 +80,6 @@ const options = commandLineArgs(optionDefinitions);
 
 // Constant Values
 const imagePath = 'inputDatasets/image.jpg';
-const dirTypeConst = ['dataProp/', 'dataService/', 'dataSia/'];
-let ipfsService = ipfsAPI({
-  host: 'ipfs.infura.io',
-  port: 5001,
-  protocol: 'https',
-});
-const ipfsProp = ipfsAPI({
-  host: '34.65.225.155',
-  port: '80',
-  protocol: 'http',
-});
-
-let propFlag = (serviceFlag = siaFlag = true);
-if (options.prop || options.service || options.sia) {
-  propFlag = options.prop;
-  serviceFlag = options.service;
-  siaFlag = options.sia;
-}
 
 const timeoutValue = options.timeout;
 const numberOfBuses = options.number;
@@ -112,6 +88,7 @@ const image = options.image;
 const inputBuses = 'inputDatasets/inputDataset' + numberOfBuses + '.csv';
 const dirImg = image ? 'datasetIPFSImage/' : 'datasetIPFS/';
 const dirTemp = dirImg + numberOfBuses + '/';
+const dirService = dirTemp + 'dataService/';
 let dirDate;
 let bus;
 
@@ -123,45 +100,25 @@ const setupEnvironment = () => {
   bus = {};
 
   if (!fs.existsSync(dirTemp)) fs.mkdirSync(dirTemp);
+  if (!fs.existsSync(dirService)) fs.mkdirSync(dirService);
   dirDate = new Date().toISOString();
-
-  const dirType = [];
-  if (propFlag) dirType.push(dirTypeConst[0]);
-  if (serviceFlag) dirType.push(dirTypeConst[1]);
-  if (siaFlag) dirType.push(dirTypeConst[2]);
-  dirType.forEach((element) => {
-    const dirPart = dirTemp + element;
-    if (!fs.existsSync(dirPart)) fs.mkdirSync(dirPart);
-    const dir = dirPart + dirDate;
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir);
-  });
+    const dirTime = dirService + dirDate;
+    // creazione cartella con timestamp
+    if (!fs.existsSync(dirTime)) fs.mkdirSync(dirTime);
 };
 
 const initBus = async (busID) => {
   try {
     // Bus object
     bus[busID] = {
-      csv: [],
-    };
-
-    if (propFlag) bus[busID].csv.push(dirTypeConst[0]);
-    else bus[busID].csv.push(0);
-    if (serviceFlag) bus[busID].csv.push(dirTypeConst[1]);
-    else bus[busID].csv.push(0);
-    if (siaFlag) bus[busID].csv.push(dirTypeConst[2]);
-    else bus[busID].csv.push(0);
-
-    for (let i = 0; i < dirTypeConst.length; i++) {
-      if (bus[busID].csv[i] != 0) {
-        // Create log file
-        const filepath = (bus[busID].csv[i] =
-          dirTemp + dirTypeConst[i] + dirDate + '/bus-' + busID + '.csv');
-        fs.writeFile(filepath, 'start,finish,counter\n', (err) => {
-          if (err) throw err;
-        });
-      }
-      sleep(2);
-    }
+      csv: '',
+    };    
+    // Create log file
+    const filepath = (bus[busID].csv =
+      dirService + dirDate + '/bus-' + busID + '.csv');
+    fs.writeFile(filepath, 'start,finish,counter\n', (err) => {
+      if (err) throw err;
+    });
   } catch (error) {
     console.log('SETUP ERROR: ' + error);
   }
@@ -170,9 +127,8 @@ const initBus = async (busID) => {
 const publish = async (b, id, json, prop, auth) => {
   const drive = google.drive({ version: 'v3', auth });
   let startTS = -1, finishTS = -1;
-  // data = new Blob([JSON.stringify(json)], {type: 'application/json'});
+  // data = new Blob([JSON.stringify(json)], {type: 'application/json'}); provare con dump
   data = JSON.stringify(json);
-
 
   try {
     //Start operations
@@ -215,7 +171,7 @@ const publish = async (b, id, json, prop, auth) => {
           // Log result
           console.log(prop + ') bus ' + b + ': ' + r + 'ms');
           fs.appendFile(
-            bus[b].csv[prop],
+            bus[b].csv,
             startTS + ',' + finishTS + ',' + id + '\n',
             (err) => {
               if (err) throw err;
@@ -230,56 +186,7 @@ const publish = async (b, id, json, prop, auth) => {
   } catch (err) {
     console.log(prop + ')' + b + ': ' + err);
     fs.appendFile(
-      bus[b].csv[prop],
-      startTS + ',' + finishTS + ',' + id + '\n',
-      (err) => {
-        if (err) throw err;
-      }
-    );
-  }
-};
-
-const publishSia = async (b, id, json) => {
-  let startTS = -1,
-    finishTS = -1;
-  try {
-    data = JSON.stringify(json);
-
-    //Start operations
-    startTS = new Date().getTime();
-
-    if (image) {
-      a = skynet.DefaultUploadOptions;
-      a.customFilename = 's' + startTS;
-      const resp = await skynet.UploadFile(imagePath, a);
-    } else {
-      const resp = await axios.post(
-        'https://siasky.net/skynet/skyfile/file/' + data + '?filename=' + data,
-        data,
-        {
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          timeout: timeoutValue,
-        }
-      );
-    }
-
-    finishTS = new Date().getTime();
-    //console.log(resp.data);
-    // Latency measures
-    r = finishTS - startTS;
-    // Log result
-    console.log('2) bus ' + b + ': ' + r + 'ms');
-    fs.appendFile(
-      bus[b].csv[2],
-      startTS + ',' + finishTS + ',' + id + '\n',
-      (err) => {
-        if (err) throw err;
-      }
-    );
-  } catch (err) {
-    console.log('2)' + b + ': ' + err);
-    fs.appendFile(
-      bus[b].csv[2],
+      bus[b].csv,
       startTS + ',' + finishTS + ',' + id + '\n',
       (err) => {
         if (err) throw err;
@@ -293,9 +200,6 @@ const go = async (auth) => {
   const liner = new lineByLine(inputBuses);
   console.log('INPUT BUSES: ' + inputBuses)
   try {
-    const base64image = new Buffer(fs.readFileSync(imagePath)).toString(
-      'base64'
-    );
     let line = liner.next(); // read first line
     while ((line = liner.next())) {
       let row = line.toString('ascii').split(',');
@@ -304,24 +208,8 @@ const go = async (auth) => {
       console.log('Waiting ' + row[0]);
       await sleep(parseInt(row[0]) * 1000);
       //console.log('Waited ' + row[0] + ' seconds for bus ' + row[1]);
-      const payloadValue = image
-        ? { photo: base64image }
-        : { latitude: row[2], longitude: row[3] };
+      const payloadValue = { latitude: row[2], longitude: row[3] };
 
-      if (propFlag) {
-        publish(
-          row[1],
-          row[4],
-          {
-            payload: payloadValue,
-            timestampISO: new Date().toISOString(),
-          },
-          0,
-          auth
-        );
-      }
-
-      if (serviceFlag) {
         publish(
           row[1],
           row[4],
@@ -332,14 +220,7 @@ const go = async (auth) => {
           1,
           auth
         );
-      }
-
-      if (siaFlag) {
-        publishSia(row[1], row[4], {
-          payload: payloadValue,
-          timestampISO: new Date().toISOString(),
-        });
-      }
+      
     }
   } catch (error) {
     console.log(error);
@@ -371,7 +252,8 @@ async function createFolder(auth) {
 
 const main = async (auth) => {
   console.log('FOLDER ID: ' + global.folderId);
-  await sleep(awaitFor * 60000);
+  // minuti da aspettare prima di caricare file
+  await sleep(awaitFor * 1000);
   setupEnvironment();
   await go(auth);
   console.log('Finished approximately at : ' + new Date().toString());
