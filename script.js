@@ -128,7 +128,7 @@ const publish = async (b, id, json, prop, auth) => {
   const drive = google.drive({ version: 'v3', auth });
   let startTS = -1, finishTS = -1;
   // data = new Blob([JSON.stringify(json)], {type: 'application/json'}); provare con dump
-  data = JSON.stringify(json);
+  data = JSON.stringify(json, null, 2);
 
   try {
     //Start operations
@@ -144,15 +144,16 @@ const publish = async (b, id, json, prop, auth) => {
         body: fs.createReadStream(imagePath)
       };
     } else {
-      var fileName = 's' + startTS + '.csv';
+      var fileName = 's' + startTS + '.json';
       var fileMetadata = {
         'name': fileName,
         parents: [global.folderId]
       };
       var media = {
-        mimeType: 'text/csv',
+        mimeType: 'application/json',
         body: data
       };
+      fs.writeFileSync(fileName, data);
     }
     //first
     new Promise(async (resolve, reject) => {
@@ -164,6 +165,7 @@ const publish = async (b, id, json, prop, auth) => {
         if (err) {
           // Handle error
           console.log('Error uploading do gdrive: ' + err);
+          fs.unlinkSync(fileName)
         } else { // if succeded
           finishTS = new Date().getTime();
           // Latency measures
@@ -177,6 +179,7 @@ const publish = async (b, id, json, prop, auth) => {
               if (err) throw err;
             }
           );
+          fs.unlinkSync(fileName)
         }
       });
       resolve(true);
@@ -198,7 +201,6 @@ const publish = async (b, id, json, prop, auth) => {
 // Main phase, reading buses behavior in order to publish messages to MAM channels
 const go = async (auth) => {
   const liner = new lineByLine(inputBuses);
-  console.log('INPUT BUSES: ' + inputBuses)
   try {
     let line = liner.next(); // read first line
     while ((line = liner.next())) {
@@ -251,7 +253,6 @@ async function createFolder(auth) {
 }
 
 const main = async (auth) => {
-  console.log('FOLDER ID: ' + global.folderId);
   // minuti da aspettare prima di caricare file
   await sleep(awaitFor * 1000);
   setupEnvironment();
