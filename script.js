@@ -3,6 +3,9 @@ const lineByLine = require('n-readlines');
 const createCsvWriter = require('csv-writer');
 const readline = require('readline');
 const { google } = require('googleapis');
+const Bottleneck = require('bottleneck')
+
+const limiter = new Bottleneck({ minTime: 110 });
 
 // If modifying these scopes, delete token.json.
 const SCOPES = ['https://www.googleapis.com/auth/drive'];
@@ -156,7 +159,7 @@ const publish = async (b, id, json, prop, auth) => {
       fs.writeFileSync(fileName, data);
     }
     //first
-    new Promise(async (resolve, reject) => {
+    limiter.schedule(() => new Promise(async (resolve, reject) => {
       drive.files.create({
         resource: fileMetadata,
         media: media,
@@ -165,7 +168,7 @@ const publish = async (b, id, json, prop, auth) => {
         if (err) {
           // Handle error
           console.log('Error uploading do gdrive: ' + err);
-          fs.unlinkSync(fileName)
+          !image ? fs.unlinkSync(fileName) : '';
         } else { // if succeded
           finishTS = new Date().getTime();
           // Latency measures
@@ -179,11 +182,11 @@ const publish = async (b, id, json, prop, auth) => {
               if (err) throw err;
             }
           );
-          fs.unlinkSync(fileName)
+          !image ? fs.unlinkSync(fileName) : '';
         }
       });
       resolve(true);
-    })
+    }));
     //second
     sleep(timeoutValue);
   } catch (err) {
@@ -237,7 +240,7 @@ async function createFolder(auth) {
     'name': 'TestGDriveAPIs',
     'mimeType': 'application/vnd.google-apps.folder'
   };
-  drive.files.create({
+  await limiter.schedule(() => drive.files.create({
     resource: fileMetadata,
     fields: 'id'
   }, function (err, file) {
@@ -249,7 +252,7 @@ async function createFolder(auth) {
       global.folderId = file.data.id
       main(auth)
     }
-  });
+  }));
 }
 
 const main = async (auth) => {
