@@ -122,8 +122,8 @@ def plot1():
                 tmp = np.array(num[1])
                 allLatenciesTemp[sumNum+mulNum] = tmp
                 avg[mulNum+sumNum] = round(np.mean(tmp)/1000, 2)
-                #err[sumNum+mulNum] = avg[mulNum+sumNum] - confInt(tmp, .95)[0]
-                err[sumNum+mulNum] = round(np.std(tmp)/1000, 2)
+                err[sumNum+mulNum] = avg[mulNum+sumNum] - confInt(tmp, .95)[0]
+                #err[sumNum+mulNum] = round(np.std(tmp)/1000, 2)
                 mulNum += len(data)
                 if flag:
                     nmbrs.append(num[3])
