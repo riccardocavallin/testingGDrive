@@ -3,7 +3,7 @@ const lineByLine = require('n-readlines');
 const createCsvWriter = require('csv-writer');
 const readline = require('readline');
 const { google } = require('googleapis');
-const Bottleneck = require('bottleneck')
+const Bottleneck = require('bottleneck');
 
 const limiter = new Bottleneck({ minTime: 110 });
 
@@ -23,7 +23,10 @@ const TOKEN_PATH = 'token.json';
 function authorize(credentials, callback) {
   const { client_secret, client_id, redirect_uris } = credentials.installed;
   const oAuth2Client = new google.auth.OAuth2(
-    client_id, client_secret, redirect_uris[0]);
+    client_id,
+    client_secret,
+    redirect_uris[0]
+  );
 
   // Check if we have previously stored a token.
   fs.readFile(TOKEN_PATH, (err, token) => {
@@ -75,7 +78,7 @@ const optionDefinitions = [
   { name: 'number', alias: 'n', type: Number, defaultValue: 10 },
   { name: 'await', alias: 'a', type: Number, defaultValue: 0 }, // set del tempo di attesa
   { name: 'image', alias: 'i', type: Boolean, defaultValue: false },
-  { name: 'timeout', alias: 't', type: Number, defaultValue: 200000 } // tempo di attesa del caricamento tra una richiesta e l'altra
+  { name: 'timeout', alias: 't', type: Number, defaultValue: 200000 }, // tempo di attesa del caricamento tra una richiesta e l'altra
 ];
 const commandLineArgs = require('command-line-args');
 const { auth } = require('googleapis/build/src/apis/abusiveexperiencereport');
@@ -89,9 +92,9 @@ const numberOfBuses = options.number;
 const awaitFor = options.await;
 const image = options.image;
 const inputBuses = 'inputDatasets/inputDataset' + numberOfBuses + '.csv';
-const dirImg = image ? 'datasetIPFSImage/' : 'datasetIPFS/';
-const dirTemp = dirImg + numberOfBuses + '/';
-const dirService = dirTemp + 'dataService/';
+const dirTemp = 'datasetIPFS/' + numberOfBuses + '/';
+const dirImg = image ? 'image/' : 'dataService/';
+const dirService = dirTemp + dirImg;
 let dirDate;
 let bus;
 
@@ -105,9 +108,9 @@ const setupEnvironment = () => {
   if (!fs.existsSync(dirTemp)) fs.mkdirSync(dirTemp);
   if (!fs.existsSync(dirService)) fs.mkdirSync(dirService);
   dirDate = new Date().toISOString();
-    const dirTime = dirService + dirDate;
-    // creazione cartella con timestamp
-    if (!fs.existsSync(dirTime)) fs.mkdirSync(dirTime);
+  const dirTime = dirService + dirDate;
+  // creazione cartella con timestamp
+  if (!fs.existsSync(dirTime)) fs.mkdirSync(dirTime);
 };
 
 const initBus = async (busID) => {
@@ -115,7 +118,7 @@ const initBus = async (busID) => {
     // Bus object
     bus[busID] = {
       csv: '',
-    };    
+    };
     // Create log file
     const filepath = (bus[busID].csv =
       dirService + dirDate + '/bus-' + busID + '.csv');
@@ -129,7 +132,8 @@ const initBus = async (busID) => {
 
 const publish = async (b, id, json, prop, auth) => {
   const drive = google.drive({ version: 'v3', auth });
-  let startTS = -1, finishTS = -1;
+  let startTS = -1,
+    finishTS = -1;
   // data = new Blob([JSON.stringify(json)], {type: 'application/json'}); provare con dump
   data = JSON.stringify(json, null, 2);
 
@@ -139,54 +143,61 @@ const publish = async (b, id, json, prop, auth) => {
     if (image) {
       var fileName = 's' + startTS + '.jpg';
       var fileMetadata = {
-        'name': fileName,
-        parents: [global.folderId]
+        name: fileName,
+        parents: [global.folderId],
       };
       var media = {
         mimeType: 'image/jpeg',
-        body: fs.createReadStream(imagePath)
+        body: fs.createReadStream(imagePath),
       };
     } else {
       var fileName = 's' + startTS + '.json';
       var fileMetadata = {
-        'name': fileName,
-        parents: [global.folderId]
+        name: fileName,
+        parents: [global.folderId],
       };
       var media = {
         mimeType: 'application/json',
-        body: data
+        body: data,
       };
       fs.writeFileSync(fileName, data);
     }
     //first
-    limiter.schedule(() => new Promise(async (resolve, reject) => {
-      drive.files.create({
-        resource: fileMetadata,
-        media: media,
-        fields: 'id'
-      }, function (err, res) {
-        if (err) {
-          // Handle error
-          console.log('Error uploading do gdrive: ' + err);
-          !image ? fs.unlinkSync(fileName) : '';
-        } else { // if succeded
-          finishTS = new Date().getTime();
-          // Latency measures
-          r = finishTS - startTS;
-          // Log result
-          console.log(prop + ') bus ' + b + ': ' + r + 'ms');
-          fs.appendFile(
-            bus[b].csv,
-            startTS + ',' + finishTS + ',' + id + '\n',
-            (err) => {
-              if (err) throw err;
+    limiter.schedule(
+      () =>
+        new Promise(async (resolve, reject) => {
+          drive.files.create(
+            {
+              resource: fileMetadata,
+              media: media,
+              fields: 'id',
+            },
+            function (err, res) {
+              if (err) {
+                // Handle error
+                console.log('Error uploading do gdrive: ' + err);
+                !image ? fs.unlinkSync(fileName) : '';
+              } else {
+                // if succeded
+                finishTS = new Date().getTime();
+                // Latency measures
+                r = finishTS - startTS;
+                // Log result
+                console.log(prop + ') bus ' + b + ': ' + r + 'ms');
+                fs.appendFile(
+                  bus[b].csv,
+                  startTS + ',' + finishTS + ',' + id + '\n',
+                  (err) => {
+                    if (err) throw err;
+                  }
+                );
+                !image ? fs.unlinkSync(fileName) : '';
+              }
             }
           );
-          !image ? fs.unlinkSync(fileName) : '';
-        }
-      });
-      resolve(true);
-    }));
+          resolve(true);
+        })
+    );
     //second
     sleep(timeoutValue);
   } catch (err) {
@@ -215,17 +226,16 @@ const go = async (auth) => {
       //console.log('Waited ' + row[0] + ' seconds for bus ' + row[1]);
       const payloadValue = { latitude: row[2], longitude: row[3] };
 
-        publish(
-          row[1],
-          row[4],
-          {
-            payload: payloadValue,
-            timestampISO: new Date().toISOString(),
-          },
-          1,
-          auth
-        );
-      
+      publish(
+        row[1],
+        row[4],
+        {
+          payload: payloadValue,
+          timestampISO: new Date().toISOString(),
+        },
+        1,
+        auth
+      );
     }
   } catch (error) {
     console.log(error);
@@ -237,22 +247,27 @@ async function createFolder(auth) {
   const drive = google.drive({ version: 'v3', auth });
   // create folder in gdrive
   var fileMetadata = {
-    'name': 'TestGDriveAPIs',
-    'mimeType': 'application/vnd.google-apps.folder'
+    name: 'TestGDriveAPIs',
+    mimeType: 'application/vnd.google-apps.folder',
   };
-  await limiter.schedule(() => drive.files.create({
-    resource: fileMetadata,
-    fields: 'id'
-  }, function (err, file) {
-    if (err) {
-      // Handle error
-      console.error(err);
-    } else {
-      console.log('Folder Id: ', file.data.id);
-      global.folderId = file.data.id
-      main(auth)
-    }
-  }));
+  await limiter.schedule(() =>
+    drive.files.create(
+      {
+        resource: fileMetadata,
+        fields: 'id',
+      },
+      function (err, file) {
+        if (err) {
+          // Handle error
+          console.error(err);
+        } else {
+          console.log('Folder Id: ', file.data.id);
+          global.folderId = file.data.id;
+          main(auth);
+        }
+      }
+    )
+  );
 }
 
 const main = async (auth) => {
@@ -262,4 +277,3 @@ const main = async (auth) => {
   await go(auth);
   console.log('Finished approximately at : ' + new Date().toString());
 };
-

@@ -13,7 +13,7 @@ errorsFlag = False
 totReqBus = 15
 totNum = len(next(os.walk(startingDir))[1])
 
-data = [[], [], []]
+data = [[], []]
 
 
 def confInt(data, confidence=0.95):
@@ -142,10 +142,7 @@ def plot1():
         b = a + width + distWidth
         positions.append(b)
         labels.append(str(nmbrs[x]))
-        c = b + width + distWidth
-        positions.append(c)
-        labels.append('  ')
-        startNum = c + width
+        startNum = b + width
 
     bp = ax.bar(positions, avg, .5, yerr=err,
                 align='center', ecolor='black', capsize=2)
@@ -162,9 +159,9 @@ def plot1():
         ax.set_ylabel("latency (sec)", fontsize=15)
     ax.set_xlabel("users", fontsize=15)
 
-    colors = ['tab:blue', 'tab:red', 'tab:green']
+    colors = ['tab:blue', 'tab:red']
     for i, bar in enumerate(bp):
-        bar.set_color(colors[i % 3])
+        bar.set_color(colors[i % 2])
 
     # ax2 = ax.twinx()
     # ylab2 = 'Errors (%)'
@@ -179,11 +176,10 @@ def plot1():
     # diamond = mlines.Line2D([], [], color='w', marker='D', linestyle='None', markeredgecolor='black',
     #                        markersize=10, label='Averages')
 
-    patch1 = mpatches.Patch(color=colors[0], label='IPFS Proprietary')
-    patch2 = mpatches.Patch(color=colors[1], label='IPFS Service')
-    patch3 = mpatches.Patch(color=colors[2], label='Sia Skynet')
+    patch1 = mpatches.Patch(color=colors[0], label='Text (1KB)')
+    patch2 = mpatches.Patch(color=colors[1], label='Image (1MB)')
 
-    ax.legend(handles=[patch1, patch2, patch3], fontsize='x-large')
+    ax.legend(handles=[patch1, patch2], fontsize='x-large')
 
 
 get_data()
