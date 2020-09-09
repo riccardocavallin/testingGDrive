@@ -19,10 +19,8 @@
   "dependencies": {
     "@nebulous/skynet": "^1.0.1",
     "axios": "^0.19.2",
-    "bottleneck": "^2.19.5",
     "command-line-args": "^5.1.1",
     "csv-writer": "^1.6.0",
-    "googleapis": "^39.2.0",
     "ipfs-http-client": "^43.0.1",
     "n-readlines": "^1.0.0"
   }
