@@ -5,3 +5,4 @@ secret.json
 node_modules/
 credentials.json
 token.json
+credentials.csv

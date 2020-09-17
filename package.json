@@ -18,6 +18,7 @@
   "homepage": "https://github.com/miker83z/testingIPFS#readme",
   "dependencies": {
     "@nebulous/skynet": "^1.0.1",
+    "aws-sdk": "^2.754.0",
     "axios": "^0.19.2",
     "bottleneck": "^2.19.5",
     "command-line-args": "^5.1.1",
