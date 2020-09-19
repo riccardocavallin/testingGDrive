@@ -7,6 +7,10 @@ const AWS = require('aws-sdk');
 
 const limiter = new Bottleneck({ minTime: 110 });
 
+// inserire credenziali 
+const ID = '';
+const SECRET = '';
+
 const BUCKET_NAME = 'testingawstesi';
 
 const s3 = new AWS.S3({
@@ -78,9 +82,10 @@ const publish = async (b, id, json, prop) => {
     startTS = new Date().getTime();
     if (image) {
       var fileName = 's' + startTS + '.jpg';
+      data = fs.createReadStream(imagePath);
     } else {
       var fileName = 's' + startTS + '.json';
-      fs.writeFileSync(fileName, data);
+      //fs.writeFileSync(fileName, data);
     }
 
     // Setting up S3 upload parameters
@@ -97,7 +102,7 @@ const publish = async (b, id, json, prop) => {
         s3.upload(params, function (err, data) {
           if (err) {
             console.log('Error uploading do AWS: ' + err);
-            !image ? fs.unlinkSync(fileName) : '';
+            //!image ? fs.unlinkSync(fileName) : '';
             throw err;
           } else {
             // if succeded
@@ -113,7 +118,7 @@ const publish = async (b, id, json, prop) => {
                 if (err) throw err;
               }
             );
-            !image ? fs.unlinkSync(fileName) : '';
+            //!image ? fs.unlinkSync(fileName) : '';
             //console.log(`File uploaded successfully. ${data.Location}`);
           }
         });
