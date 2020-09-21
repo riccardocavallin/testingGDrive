@@ -9,7 +9,7 @@ import math
 
 printFlag = False
 startingDir = 'datasetIPFS'
-errorsFlag = False
+errorsFlag = True
 totReqBus = 15
 totNum = len(next(os.walk(startingDir))[1])
 
